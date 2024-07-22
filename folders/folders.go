@@ -9,11 +9,11 @@ import (
 // Output: FetchFolderResponse with matching Folders, or error
 func GetAllFolders(req *FetchFolderRequest) (*FetchFolderResponse, error) {
 	// TODO: declared but unused vars
-	var (
-		err error
-		f1  Folder
-		fs  []*Folder
-	)
+	//var (
+	//	err error
+	//	f1  Folder
+	//	fs  []*Folder
+	//)
 
 	// create an empty slice of folders
 	f := []Folder{}
@@ -22,16 +22,14 @@ func GetAllFolders(req *FetchFolderRequest) (*FetchFolderResponse, error) {
 	r, _ := FetchAllFoldersByOrgID(req.OrgID)
 
 	// loop through fetched folders and append each folder to f slice
-	// k is unused
-	for k, v := range r {
+	for _, v := range r {
 		f = append(f, *v)
 	}
 
 	// create another slice of folder pointers
 	var fp []*Folder
 
-	// k1 is unused
-	for k1, v1 := range f {
+	for _, v1 := range f {
 		fp = append(fp, &v1)
 	}
 
