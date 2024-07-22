@@ -10,23 +10,15 @@ import (
 // Output: FetchFolderResponse with matching Folders, or error
 func GetAllFolders(req *FetchFolderRequest) (*FetchFolderResponse, error) {
 	// fetch folders by org id
-	r, err := FetchAllFoldersByOrgID(req.OrgID)
+	folders, err := FetchAllFoldersByOrgID(req.OrgID)
 
 	// error handling
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch folders: %w", err)
 	}
 
-	// create a slice of folder pointers
-	fp := make([]*Folder, len(r))
-	for i, v := range r {
-		fp[i] = v
-	}
-
-	// create response with folder pointers
-	ffr := &FetchFolderResponse{Folders: fp}
-
-	return ffr, nil
+	// create response directly with fetched folders
+	return &FetchFolderResponse{Folders: folders}, nil
 }
 
 // FetchAllFoldersByOrgID gets folders for a specific org from sample data
@@ -34,13 +26,14 @@ func GetAllFolders(req *FetchFolderRequest) (*FetchFolderResponse, error) {
 // Output: slice of matching Folder pointers, or error
 func FetchAllFoldersByOrgID(orgID uuid.UUID) ([]*Folder, error) {
 	// get all folders from sample data
-	folders := GetSampleData()
+	allFolders := GetSampleData()
 
-	// create slice for matching folders
-	resFolder := []*Folder{}
+	// estimate initial capacity to reduce allocations
+	estimatedCapacity := len(allFolders) / 2 // assume about half will match
+	resFolder := make([]*Folder, 0, estimatedCapacity)
 
 	// loop through folders, append matches to resFolder
-	for _, folder := range folders {
+	for _, folder := range allFolders {
 		if folder.OrgId == orgID {
 			resFolder = append(resFolder, folder)
 		}
