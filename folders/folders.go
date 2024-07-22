@@ -1,6 +1,7 @@
 package folders
 
 import (
+	"fmt"
 	"github.com/gofrs/uuid"
 )
 
@@ -8,34 +9,22 @@ import (
 // Input: FetchFolderRequest with OrgID
 // Output: FetchFolderResponse with matching Folders, or error
 func GetAllFolders(req *FetchFolderRequest) (*FetchFolderResponse, error) {
-	// TODO: declared but unused vars
-	//var (
-	//	err error
-	//	f1  Folder
-	//	fs  []*Folder
-	//)
+	// fetch folders by org id
+	r, err := FetchAllFoldersByOrgID(req.OrgID)
 
-	// create an empty slice of folders
-	f := []Folder{}
-
-	// fetch folders by org id, ignoring potential error (seems risky?)
-	r, _ := FetchAllFoldersByOrgID(req.OrgID)
-
-	// loop through fetched folders and append each folder to f slice
-	for _, v := range r {
-		f = append(f, *v)
+	// error handling
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch folders: %w", err)
 	}
 
-	// create another slice of folder pointers
-	var fp []*Folder
-
-	for _, v1 := range f {
-		fp = append(fp, &v1)
+	// create a slice of folder pointers
+	fp := make([]*Folder, len(r))
+	for i, v := range r {
+		fp[i] = v
 	}
 
 	// create response with folder pointers
-	var ffr *FetchFolderResponse
-	ffr = &FetchFolderResponse{Folders: fp}
+	ffr := &FetchFolderResponse{Folders: fp}
 
 	return ffr, nil
 }
@@ -56,5 +45,11 @@ func FetchAllFoldersByOrgID(orgID uuid.UUID) ([]*Folder, error) {
 			resFolder = append(resFolder, folder)
 		}
 	}
+
+	// error handling
+	if len(resFolder) == 0 {
+		return nil, fmt.Errorf("no folders found for organization ID %s", orgID)
+	}
+
 	return resFolder, nil
 }
