@@ -5,25 +5,24 @@ import (
 	"fmt"
 	"github.com/gofrs/uuid"
 	"log"
-	"strconv"
 )
 
 // PaginatedFetchRequest paginated fetch request
 type PaginatedFetchRequest struct {
-	OrgID uuid.UUID
-	Limit int    // items per page
-	Token string // pagination token
+	OrgID  uuid.UUID
+	Limit  int    // items per page
+	Cursor string // pagination cursor
 }
 
 // PaginatedFetchResponse paginated fetch response
 type PaginatedFetchResponse struct {
-	Folders   []*Folder
-	NextToken string
+	Folders    []*Folder
+	NextCursor string
 }
 
 // GetPaginatedFolders get paginated folders
 func GetPaginatedFolders(req *PaginatedFetchRequest) (*PaginatedFetchResponse, error) {
-	log.Printf("Received request for org: %s, limit: %d, token: %s", req.OrgID, req.Limit, req.Token)
+	log.Printf("Received request for org: %s, limit: %d, cursor: %s", req.OrgID, req.Limit, req.Cursor)
 
 	if req.OrgID == uuid.Nil {
 		return nil, fmt.Errorf("invalid org ID: cannot be nil")
@@ -35,79 +34,79 @@ func GetPaginatedFolders(req *PaginatedFetchRequest) (*PaginatedFetchResponse, e
 		log.Printf("Using default limit: %d", req.Limit)
 	}
 
-	// decode start index from token
-	startIndex, err := decodeToken(req.Token)
+	// decode cursor
+	lastID, err := decodeCursor(req.Cursor)
 	if err != nil {
-		log.Printf("Error decoding token: %v", err)
-		startIndex = 0 // fallback to start if token is invalid
+		log.Printf("Error decoding cursor: %v", err)
+		lastID = uuid.Nil // fallback to start if cursor is invalid
 	}
 
-	// Simulate efficient database query
-	paginatedFolders, totalCount, err := fetchFoldersPage(req.OrgID, startIndex, req.Limit)
+	// Fetch folders page
+	paginatedFolders, nextCursor, err := fetchFoldersPage(req.OrgID, lastID, req.Limit)
 	if err != nil {
 		log.Printf("Error fetching folders: %v", err)
 		return nil, fmt.Errorf("failed to fetch folders: %w", err)
 	}
 
-	// set next token if more folders exist
-	var nextToken string
-	if startIndex+req.Limit < totalCount {
-		nextToken = encodeToken(startIndex + req.Limit)
-	}
-
-	log.Printf("Returning %d folders, next token: %s", len(paginatedFolders), nextToken)
+	log.Printf("Returning %d folders, next cursor: %s", len(paginatedFolders), nextCursor)
 
 	return &PaginatedFetchResponse{
-		Folders:   paginatedFolders,
-		NextToken: nextToken,
+		Folders:    paginatedFolders,
+		NextCursor: nextCursor,
 	}, nil
 }
 
-// fetchFoldersPage simulates an efficient database query
-func fetchFoldersPage(orgID uuid.UUID, offset, limit int) ([]*Folder, int, error) {
+// fetchFoldersPage simulates an efficient database query using cursor-based pagination
+func fetchFoldersPage(orgID, lastID uuid.UUID, limit int) ([]*Folder, string, error) {
 	allFolders := GetSampleData()
 
-	var orgFolders []*Folder
+	var result []*Folder
+	var lastFolder *Folder
+	seenLastID := lastID == uuid.Nil
+
 	for _, folder := range allFolders {
-		if folder.OrgId == orgID {
-			orgFolders = append(orgFolders, folder)
+		if folder.OrgId != orgID {
+			continue
+		}
+
+		if !seenLastID {
+			if folder.Id == lastID {
+				seenLastID = true
+			}
+			continue
+		}
+
+		result = append(result, folder)
+		lastFolder = folder
+
+		if len(result) == limit {
+			break
 		}
 	}
 
-	totalCount := len(orgFolders)
-
-	if offset >= totalCount {
-		return []*Folder{}, totalCount, nil
+	var nextCursor string
+	if lastFolder != nil {
+		nextCursor = encodeCursor(lastFolder.Id)
 	}
 
-	end := offset + limit
-	if end > totalCount {
-		end = totalCount
-	}
-
-	return orgFolders[offset:end], totalCount, nil
+	return result, nextCursor, nil
 }
 
-// encodeToken encodes the index into a base64 string
-func encodeToken(index int) string {
-	return base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%d", index)))
+// encodeCursor encodes the UUID into a base64 string
+func encodeCursor(id uuid.UUID) string {
+	return base64.StdEncoding.EncodeToString(id.Bytes())
 }
 
-// decodeToken decodes the token back into an index
-func decodeToken(token string) (int, error) {
-	if token == "" {
-		return 0, nil
+// decodeCursor decodes the cursor back into a UUID
+func decodeCursor(cursor string) (uuid.UUID, error) {
+	if cursor == "" {
+		return uuid.Nil, nil
 	}
 
-	decoded, err := base64.StdEncoding.DecodeString(token)
+	decoded, err := base64.StdEncoding.DecodeString(cursor)
 	if err != nil {
-		return 0, fmt.Errorf("invalid token format: %w", err)
+		return uuid.Nil, fmt.Errorf("invalid cursor format: %w", err)
 	}
 
-	index, err := strconv.Atoi(string(decoded))
-	if err != nil {
-		return 0, fmt.Errorf("invalid token content: %w", err)
-	}
-
-	return index, nil
+	return uuid.FromBytes(decoded)
 }
