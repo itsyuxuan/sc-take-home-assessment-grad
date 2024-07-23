@@ -35,20 +35,6 @@ func GetPaginatedFolders(req *PaginatedFetchRequest) (*PaginatedFetchResponse, e
 		log.Printf("Using default limit: %d", req.Limit)
 	}
 
-	// fetch all folders (in real world, we'd query the db with limit and offset)
-	allFolders, err := FetchAllFoldersByOrgID(req.OrgID)
-	if err != nil {
-		log.Printf("Error fetching folders: %v", err)
-		// Return an empty response instead of an error for non-existent org ID
-		if err.Error() == fmt.Sprintf("no folders found for organisation ID %s", req.OrgID) {
-			return &PaginatedFetchResponse{
-				Folders:   []*Folder{},
-				NextToken: "",
-			}, nil
-		}
-		return nil, fmt.Errorf("failed to fetch folders: %w", err)
-	}
-
 	// decode start index from token
 	startIndex, err := decodeToken(req.Token)
 	if err != nil {
@@ -56,27 +42,17 @@ func GetPaginatedFolders(req *PaginatedFetchRequest) (*PaginatedFetchResponse, e
 		startIndex = 0 // fallback to start if token is invalid
 	}
 
-	// handle out of bounds
-	if startIndex >= len(allFolders) {
-		log.Printf("Start index out of bounds: %d >= %d", startIndex, len(allFolders))
-		return &PaginatedFetchResponse{
-			Folders:   []*Folder{},
-			NextToken: "",
-		}, nil
+	// Simulate efficient database query
+	paginatedFolders, totalCount, err := fetchFoldersPage(req.OrgID, startIndex, req.Limit)
+	if err != nil {
+		log.Printf("Error fetching folders: %v", err)
+		return nil, fmt.Errorf("failed to fetch folders: %w", err)
 	}
-
-	// calculate end index
-	endIndex := startIndex + req.Limit
-	if endIndex > len(allFolders) {
-		endIndex = len(allFolders)
-	}
-
-	paginatedFolders := allFolders[startIndex:endIndex]
 
 	// set next token if more folders exist
 	var nextToken string
-	if endIndex < len(allFolders) {
-		nextToken = encodeToken(endIndex)
+	if startIndex+req.Limit < totalCount {
+		nextToken = encodeToken(startIndex + req.Limit)
 	}
 
 	log.Printf("Returning %d folders, next token: %s", len(paginatedFolders), nextToken)
@@ -85,6 +61,31 @@ func GetPaginatedFolders(req *PaginatedFetchRequest) (*PaginatedFetchResponse, e
 		Folders:   paginatedFolders,
 		NextToken: nextToken,
 	}, nil
+}
+
+// fetchFoldersPage simulates an efficient database query
+func fetchFoldersPage(orgID uuid.UUID, offset, limit int) ([]*Folder, int, error) {
+	allFolders := GetSampleData()
+
+	var orgFolders []*Folder
+	for _, folder := range allFolders {
+		if folder.OrgId == orgID {
+			orgFolders = append(orgFolders, folder)
+		}
+	}
+
+	totalCount := len(orgFolders)
+
+	if offset >= totalCount {
+		return []*Folder{}, totalCount, nil
+	}
+
+	end := offset + limit
+	if end > totalCount {
+		end = totalCount
+	}
+
+	return orgFolders[offset:end], totalCount, nil
 }
 
 // encodeToken encodes the index into a base64 string
