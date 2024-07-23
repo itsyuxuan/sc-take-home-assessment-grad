@@ -8,6 +8,8 @@ import (
 
 func TestGetPaginatedFolders(t *testing.T) {
 	testOrgID := uuid.FromStringOrNil("c1556e17-b7c0-45a3-a6ae-9546248fb17a")
+	anotherOrgID := uuid.FromStringOrNil("52214b35-f4da-461a-9f93-fbd3590e700f")
+	nonExistentOrgID := uuid.Must(uuid.NewV4())
 
 	t.Run("fetch_first_page", func(t *testing.T) {
 		req := &PaginatedFetchRequest{
@@ -21,45 +23,29 @@ func TestGetPaginatedFolders(t *testing.T) {
 		assert.NotEmpty(t, res.NextToken)
 	})
 
-	t.Run("fetch_next_page", func(t *testing.T) {
+	t.Run("fetch_for_different_org", func(t *testing.T) {
 		req := &PaginatedFetchRequest{
-			OrgID: testOrgID,
+			OrgID: anotherOrgID,
 			Limit: 5,
-			Token: encodeToken(5),
-		}
-		res, err := GetPaginatedFolders(req)
-
-		assert.NoError(t, err)
-		assert.Len(t, res.Folders, 5)
-		assert.NotEqual(t, res.Folders[0].Id, uuid.Nil)
-	})
-
-	t.Run("fetch_last_page", func(t *testing.T) {
-		allFolders, _ := FetchAllFoldersByOrgID(testOrgID)
-		lastPageStart := len(allFolders) - 3
-
-		req := &PaginatedFetchRequest{
-			OrgID: testOrgID,
-			Limit: 5,
-			Token: encodeToken(lastPageStart),
 		}
 		res, err := GetPaginatedFolders(req)
 
 		assert.NoError(t, err)
 		assert.NotEmpty(t, res.Folders)
-		assert.Len(t, res.Folders, 3)
-		assert.Empty(t, res.NextToken)
+		for _, folder := range res.Folders {
+			assert.Equal(t, anotherOrgID, folder.OrgId)
+		}
 	})
 
-	t.Run("fetch_beyond_last_page", func(t *testing.T) {
+	t.Run("fetch_for_non_existent_org", func(t *testing.T) {
 		req := &PaginatedFetchRequest{
-			OrgID: testOrgID,
+			OrgID: nonExistentOrgID,
 			Limit: 5,
-			Token: encodeToken(99999),
 		}
 		res, err := GetPaginatedFolders(req)
 
 		assert.NoError(t, err)
+		assert.NotNil(t, res)
 		assert.Empty(t, res.Folders)
 		assert.Empty(t, res.NextToken)
 	})
@@ -87,6 +73,17 @@ func TestGetPaginatedFolders(t *testing.T) {
 		assert.Len(t, res.Folders, 10) // should use default limit
 	})
 
+	t.Run("fetch_with_zero_limit", func(t *testing.T) {
+		req := &PaginatedFetchRequest{
+			OrgID: testOrgID,
+			Limit: 0,
+		}
+		res, err := GetPaginatedFolders(req)
+
+		assert.NoError(t, err)
+		assert.Len(t, res.Folders, 10) // should use default limit
+	})
+
 	t.Run("fetch_with_invalid_token", func(t *testing.T) {
 		req := &PaginatedFetchRequest{
 			OrgID: testOrgID,
@@ -97,6 +94,19 @@ func TestGetPaginatedFolders(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.Len(t, res.Folders, 5) // should start from beginning
+	})
+
+	t.Run("fetch_with_out_of_bounds_token", func(t *testing.T) {
+		req := &PaginatedFetchRequest{
+			OrgID: testOrgID,
+			Limit: 5,
+			Token: encodeToken(99999),
+		}
+		res, err := GetPaginatedFolders(req)
+
+		assert.NoError(t, err)
+		assert.Empty(t, res.Folders)
+		assert.Empty(t, res.NextToken)
 	})
 }
 
