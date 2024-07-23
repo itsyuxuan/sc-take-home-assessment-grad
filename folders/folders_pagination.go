@@ -5,42 +5,43 @@ import (
 	"github.com/gofrs/uuid"
 )
 
-// PaginatedFetchRequest adds pagination params to the original request
+// PaginatedFetchRequest paginated fetch request
 type PaginatedFetchRequest struct {
 	OrgID uuid.UUID
-	Limit int    // number of items per page
-	Token string // pagination token for fetching next page
+	Limit int    // items per page
+	Token string // pagination token
 }
 
-// PaginatedFetchResponse includes a token for the next page
+// PaginatedFetchResponse paginated fetch response
 type PaginatedFetchResponse struct {
 	Folders   []*Folder
 	NextToken string
 }
 
-// GetPaginatedFolders fetches folders with pagination
+// GetPaginatedFolders get paginated folders
 func GetPaginatedFolders(req *PaginatedFetchRequest) (*PaginatedFetchResponse, error) {
 	if req.OrgID == uuid.Nil {
 		return nil, fmt.Errorf("invalid org ID")
 	}
 
-	// use a sensible default if limit is not set
+	// default limit if not set
 	if req.Limit <= 0 {
 		req.Limit = 10
 	}
 
+	// fetch all folders (in real world, we'd query the db with limit and offset)
 	allFolders, err := FetchAllFoldersByOrgID(req.OrgID)
 	if err != nil {
 		return nil, err
 	}
 
-	// decode the starting index from the token
+	// decode start index from token
 	startIndex := 0
 	if req.Token != "" {
 		startIndex = decodeToken(req.Token)
 	}
 
-	// make sure we don't go out of bounds
+	// handle out of bounds
 	if startIndex >= len(allFolders) {
 		return &PaginatedFetchResponse{
 			Folders:   []*Folder{},
@@ -48,7 +49,7 @@ func GetPaginatedFolders(req *PaginatedFetchRequest) (*PaginatedFetchResponse, e
 		}, nil
 	}
 
-	// calculate the end index, ensuring we don't exceed the slice bounds
+	// calculate end index
 	endIndex := startIndex + req.Limit
 	if endIndex > len(allFolders) {
 		endIndex = len(allFolders)
@@ -56,7 +57,7 @@ func GetPaginatedFolders(req *PaginatedFetchRequest) (*PaginatedFetchResponse, e
 
 	paginatedFolders := allFolders[startIndex:endIndex]
 
-	// set the next token if there are more folders to fetch
+	// set next token if more folders exist
 	var nextToken string
 	if endIndex < len(allFolders) {
 		nextToken = encodeToken(endIndex)
@@ -68,12 +69,12 @@ func GetPaginatedFolders(req *PaginatedFetchRequest) (*PaginatedFetchResponse, e
 	}, nil
 }
 
-// encodeToken converts an index to a string token
+// encode token (simple for now)
 func encodeToken(index int) string {
 	return fmt.Sprintf("%d", index)
 }
 
-// decodeToken converts a string token back to an index
+// decode token (simple for now)
 func decodeToken(token string) int {
 	var index int
 	fmt.Sscanf(token, "%d", &index)
