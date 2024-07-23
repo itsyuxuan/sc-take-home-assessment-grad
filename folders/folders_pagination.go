@@ -39,6 +39,13 @@ func GetPaginatedFolders(req *PaginatedFetchRequest) (*PaginatedFetchResponse, e
 	allFolders, err := FetchAllFoldersByOrgID(req.OrgID)
 	if err != nil {
 		log.Printf("Error fetching folders: %v", err)
+		// Return an empty response instead of an error for non-existent org ID
+		if err.Error() == fmt.Sprintf("no folders found for organisation ID %s", req.OrgID) {
+			return &PaginatedFetchResponse{
+				Folders:   []*Folder{},
+				NextToken: "",
+			}, nil
+		}
 		return nil, fmt.Errorf("failed to fetch folders: %w", err)
 	}
 
