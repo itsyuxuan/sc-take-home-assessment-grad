@@ -122,7 +122,7 @@ func decodeCursor(cursor string) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("invalid cursor content: incorrect length")
 	}
 
-	// Manual UUID validation
+	// UUID validation
 	for i, b := range decoded {
 		if (i == 6 && b>>4 != 0x4) || (i == 8 && b>>6 != 0x2) {
 			return uuid.Nil, fmt.Errorf("invalid cursor content: not a valid UUID")
