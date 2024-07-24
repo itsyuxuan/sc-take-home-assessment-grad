@@ -2,6 +2,38 @@
 
 The technical take home for SC graduate program of 2025.
 
+## Pagination Implementation
+
+I implement cursor-based pagination for efficient data retrieval. Key features:
+
+- Uses a cursor (based on the last folder ID) instead of offset-based pagination.
+- Support fetching a specified number of items per page (default 10, max 100).
+- Provide a `NextCursor` for fetching subsequent pages.
+
+To use pagination:
+
+1. Call `GetPaginatedFolders` with a `PaginatedFetchRequest`.
+2. Use the `NextCursor` from the response to fetch the next page.
+3. Repeat until `NextCursor` is empty, indicating the last page.
+
+Example:
+
+```
+req := &PaginatedFetchRequest{
+    OrgID: yourOrgID,
+    Limit: 10,
+    Cursor: "", // empty for first page
+}
+res, err := GetPaginatedFolders(req)
+// Handle response and error
+```
+
+## Test Coverage
+
+- `folders.go`: 100% statements covered
+- `folders_pagination.go`: 92.5% statements covered
+
+
 ## Getting started
 
 Requires `Go` >= `1.20`
