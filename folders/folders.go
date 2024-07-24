@@ -38,7 +38,7 @@ func FetchAllFoldersByOrgID(orgID uuid.UUID) ([]*Folder, error) {
 	allFolders := GetSampleData()
 
 	// create slice for matching folders
-	resFolder := []*Folder{}
+	var resFolder []*Folder
 
 	// loop through folders, append matches to resFolder
 	for _, folder := range allFolders {

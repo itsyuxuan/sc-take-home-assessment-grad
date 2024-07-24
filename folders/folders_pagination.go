@@ -20,7 +20,9 @@ type PaginatedFetchResponse struct {
 	NextCursor string
 }
 
-// GetPaginatedFolders get paginated folders
+// GetPaginatedFolders retrieves a page of folders for a given organisation
+// Input: PaginatedFetchRequest with OrgID, Limit, and Cursor
+// Output: PaginatedFetchResponse with matching Folders and NextCursor, or error
 func GetPaginatedFolders(req *PaginatedFetchRequest) (*PaginatedFetchResponse, error) {
 	log.Printf("Received request for org: %s, limit: %d, cursor: %s", req.OrgID, req.Limit, req.Cursor)
 
@@ -32,6 +34,12 @@ func GetPaginatedFolders(req *PaginatedFetchRequest) (*PaginatedFetchResponse, e
 	if req.Limit <= 0 {
 		req.Limit = 10
 		log.Printf("Using default limit: %d", req.Limit)
+	}
+
+	// maximum limit to prevent excessive data fetching
+	if req.Limit > 100 {
+		req.Limit = 100
+		log.Printf("Limiting to maximum of 100 items per page")
 	}
 
 	// decode cursor
@@ -57,6 +65,8 @@ func GetPaginatedFolders(req *PaginatedFetchRequest) (*PaginatedFetchResponse, e
 }
 
 // fetchFoldersPage simulates an efficient database query using cursor-based pagination
+// Input: orgID (UUID), lastID (UUID), limit (int)
+// Output: slice of Folder pointers, next cursor string, error
 func fetchFoldersPage(orgID, lastID uuid.UUID, limit int) ([]*Folder, string, error) {
 	allFolders := GetSampleData()
 
@@ -85,7 +95,7 @@ func fetchFoldersPage(orgID, lastID uuid.UUID, limit int) ([]*Folder, string, er
 	}
 
 	var nextCursor string
-	if lastFolder != nil {
+	if lastFolder != nil && lastFolder.Id != lastID {
 		nextCursor = encodeCursor(lastFolder.Id)
 	}
 
@@ -108,5 +118,21 @@ func decodeCursor(cursor string) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("invalid cursor format: %w", err)
 	}
 
-	return uuid.FromBytes(decoded)
+	if len(decoded) != 16 {
+		return uuid.Nil, fmt.Errorf("invalid cursor content: incorrect length")
+	}
+
+	// Manual UUID validation
+	for i, b := range decoded {
+		if (i == 6 && b>>4 != 0x4) || (i == 8 && b>>6 != 0x2) {
+			return uuid.Nil, fmt.Errorf("invalid cursor content: not a valid UUID")
+		}
+	}
+
+	id, err := uuid.FromBytes(decoded)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("invalid cursor content: %w", err)
+	}
+
+	return id, nil
 }

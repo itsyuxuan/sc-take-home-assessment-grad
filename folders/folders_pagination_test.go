@@ -1,6 +1,7 @@
 package folders
 
 import (
+	"encoding/base64"
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 	"testing"
@@ -103,6 +104,30 @@ func TestGetPaginatedFolders(t *testing.T) {
 		assert.Len(t, res.Folders, 10) // should use default limit
 	})
 
+	t.Run("fetch_with_small_limit", func(t *testing.T) {
+		req := &PaginatedFetchRequest{
+			OrgID: testOrgID,
+			Limit: 1,
+		}
+		res, err := GetPaginatedFolders(req)
+
+		assert.NoError(t, err)
+		assert.Len(t, res.Folders, 1)
+		assert.NotEmpty(t, res.NextCursor)
+	})
+
+	t.Run("fetch_with_limit_exceeding_maximum", func(t *testing.T) {
+		req := &PaginatedFetchRequest{
+			OrgID: testOrgID,
+			Limit: 150,
+		}
+		res, err := GetPaginatedFolders(req)
+
+		assert.NoError(t, err)
+		assert.Len(t, res.Folders, 100) // should use maximum limit
+		assert.NotEmpty(t, res.NextCursor)
+	})
+
 	t.Run("fetch_with_invalid_cursor", func(t *testing.T) {
 		req := &PaginatedFetchRequest{
 			OrgID:  testOrgID,
@@ -112,14 +137,31 @@ func TestGetPaginatedFolders(t *testing.T) {
 		res, err := GetPaginatedFolders(req)
 
 		assert.NoError(t, err)
+		assert.NotNil(t, res)
 		assert.Len(t, res.Folders, 5) // should start from beginning
+	})
+
+	t.Run("fetch_with_non_existent_folder_cursor", func(t *testing.T) {
+		nonExistentID := uuid.Must(uuid.NewV4())
+		cursor := encodeCursor(nonExistentID)
+
+		req := &PaginatedFetchRequest{
+			OrgID:  testOrgID,
+			Limit:  10,
+			Cursor: cursor,
+		}
+		res, err := GetPaginatedFolders(req)
+
+		assert.NoError(t, err)
+		assert.Empty(t, res.Folders)    // Expecting empty folders
+		assert.Empty(t, res.NextCursor) // Expecting empty next cursor
 	})
 
 	t.Run("fetch_all_pages", func(t *testing.T) {
 		allFolders, _ := FetchAllFoldersByOrgID(testOrgID)
 		totalFolders := len(allFolders)
 
-		fetchedFolders := []*Folder{}
+		var fetchedFolders []*Folder
 		var nextCursor string
 
 		for {
@@ -140,6 +182,77 @@ func TestGetPaginatedFolders(t *testing.T) {
 		}
 
 		assert.Len(t, fetchedFolders, totalFolders)
+	})
+
+	t.Run("fetch_with_last_folder_cursor", func(t *testing.T) {
+		allFolders, _ := FetchAllFoldersByOrgID(testOrgID)
+		lastFolder := allFolders[len(allFolders)-1]
+		lastCursor := encodeCursor(lastFolder.Id)
+
+		req := &PaginatedFetchRequest{
+			OrgID:  testOrgID,
+			Limit:  10,
+			Cursor: lastCursor,
+		}
+		res, err := GetPaginatedFolders(req)
+
+		assert.NoError(t, err)
+		assert.Empty(t, res.Folders)
+		assert.Empty(t, res.NextCursor)
+	})
+
+	t.Run("fetch_empty_page", func(t *testing.T) {
+		emptyOrgID := uuid.Must(uuid.NewV4())
+		req := &PaginatedFetchRequest{
+			OrgID: emptyOrgID,
+			Limit: 10,
+		}
+		res, err := GetPaginatedFolders(req)
+
+		assert.NoError(t, err)
+		assert.Empty(t, res.Folders)
+		assert.Empty(t, res.NextCursor)
+	})
+
+	t.Run("fetch_last_page_with_fewer_items", func(t *testing.T) {
+		allFolders, _ := FetchAllFoldersByOrgID(testOrgID)
+		lastPageStart := len(allFolders) - 3 // Assuming there are at least 3 folders
+		lastPageCursor := encodeCursor(allFolders[lastPageStart].Id)
+
+		req := &PaginatedFetchRequest{
+			OrgID:  testOrgID,
+			Limit:  10,
+			Cursor: lastPageCursor,
+		}
+		res, err := GetPaginatedFolders(req)
+
+		assert.NoError(t, err)
+		assert.Len(t, res.Folders, 2)      // Expecting 2 folders instead of 3
+		assert.NotEmpty(t, res.NextCursor) // Expecting a non-empty next cursor
+	})
+
+	t.Run("default_limit", func(t *testing.T) {
+		req := &PaginatedFetchRequest{
+			OrgID: testOrgID,
+			Limit: -1,
+		}
+		res, err := GetPaginatedFolders(req)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.Equal(t, 10, req.Limit)
+	})
+
+	t.Run("max_limit", func(t *testing.T) {
+		req := &PaginatedFetchRequest{
+			OrgID: testOrgID,
+			Limit: 200,
+		}
+		res, err := GetPaginatedFolders(req)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.Equal(t, 100, req.Limit)
 	})
 }
 
@@ -165,5 +278,20 @@ func TestCursorEncodingDecoding(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid cursor format")
+	})
+
+	t.Run("decode_invalid_base64", func(t *testing.T) {
+		_, err := decodeCursor("ThisIsNotBase64!")
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid cursor format")
+	})
+
+	t.Run("decode_invalid_uuid", func(t *testing.T) {
+		invalidUUID := base64.StdEncoding.EncodeToString([]byte("0123456789abcdef"))
+		_, err := decodeCursor(invalidUUID)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid cursor content")
 	})
 }
